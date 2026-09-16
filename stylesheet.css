@@ -129,3 +129,19 @@ name {
 span.highlight {
   background-color: #ffffd0;
 }
+
+.profile-photo {
+  float: left;
+  max-width: 200px;
+  margin: 0 20px 10px 0;
+  border-radius: 8px;
+}
+
+@media only screen and (max-width: 767px) {
+  .profile-photo {
+    float: none;
+    display: block;
+    max-width: 60%;
+    margin: 0 auto 15px auto;
+  }
+}
