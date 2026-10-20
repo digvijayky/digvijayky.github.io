@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dissertation Defense Slides | Dig Vijay Kumar Yarlagadda</title>
+<meta name="description" content="Representation Learning for Modeling the Spatial Architecture of Cancer. PhD thesis defense slides with embedded videos.">
+<style>
+  :root { --bg: #111; --fg: #eee; --muted: #9a9a9a; --bar: #1c1c1c; --accent: #7fb3ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  body { display: flex; flex-direction: column; overflow: hidden; }
+  #viewport { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 8px; }
+  #stage { position: relative; aspect-ratio: 16 / 9; width: min(100%, calc((100vh - 64px) * 16 / 9));
+    background: #000; box-shadow: 0 2px 20px rgba(0,0,0,.6); user-select: none; -webkit-user-select: none; }
+  #stage img.slide { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .vwrap { position: absolute; overflow: hidden; display: none; }
+  .vwrap.on { display: block; }
+  .vwrap video { position: absolute; left: 0; width: 100%; object-fit: fill; background: transparent; }
+  #bar { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 16px; background: var(--bar); border-top: 1px solid #2a2a2a; }
+  #bar button { background: #2b2b2b; color: var(--fg); border: 1px solid #3a3a3a; border-radius: 6px;
+    padding: 6px 12px; font: inherit; cursor: pointer; }
+  #bar button:hover { background: #363636; }
+  #bar button:disabled { opacity: .4; cursor: default; }
+  #count { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); }
+  #bar a { color: var(--accent); text-decoration: none; }
+  #bar a:hover { text-decoration: underline; }
+  .sep { color: #444; }
+  :fullscreen #bar { display: none; }
+  :fullscreen #stage { width: min(100vw, calc(100vh * 16 / 9)); box-shadow: none; }
+  :fullscreen #viewport { padding: 0; }
+  @media (max-width: 600px) { #bar { gap: 6px; padding: 8px 12px; } #bar .wide { display: none; } }
+</style>
+</head>
+<body>
+<div id="viewport">
+  <div id="stage" aria-live="polite">
+    <img class="slide" id="slideimg" alt="Slide 1" src="img/s-01.jpg">
+  </div>
+</div>
+<div id="bar">
+  <button id="prev" aria-label="Previous slide">&#8592;</button>
+  <span id="count">1 / 44</span>
+  <button id="next" aria-label="Next slide">&#8594;</button>
+  <button id="fs" class="wide" aria-label="Full screen">Full screen</button>
+  <span class="sep wide">|</span>
+  <a href="../../data/Yarlagadda_defense_slides.pdf">PDF</a>
+  <span class="sep">/</span>
+  <a href="https://drive.usercontent.google.com/download?id=10DOPtFgP4WW-bAWXnHxcLWZsTFuUoQou&amp;export=download&amp;confirm=t">PPTX</a>
+  <span class="sep">/</span>
+  <a href="../../">Home</a>
+</div>
+<noscript><p style="text-align:center">This viewer needs JavaScript. <a href="../../data/Yarlagadda_defense_slides.pdf">Open the PDF instead.</a></p></noscript>
+<script>
+(function () {
+  var N = 44;
+  // Video placement copied from the PPTX (EMU / slide size, srcRect crop in fractions).
+  var VIDEOS = [
+    { slide: 7,  src: "video/slide07.mp4", left: 6285844 / 12192000, top: 797800 / 6858000,
+      width: 5906155 / 12192000, height: 3278846 / 6858000, cropT: 0.06013, cropB: 0.08105, controls: false },
+    { slide: 19, src: "video/slide19.mp4", left: 739775 / 12192000, top: 768747 / 6858000,
+      width: 10712450 / 12192000, height: 6025753 / 6858000, cropT: 0, cropB: 0, controls: true }
+  ];
+  var stage = document.getElementById("stage"), img = document.getElementById("slideimg");
+  var countEl = document.getElementById("count"), prevB = document.getElementById("prev"), nextB = document.getElementById("next");
+  var cur = 1, cache = {};
+
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function srcFor(n) { return "img/s-" + pad(n) + ".jpg"; }
+
+  VIDEOS.forEach(function (v) {
+    var w = document.createElement("div");
+    w.className = "vwrap";
+    w.style.left = (v.left * 100) + "%"; w.style.top = (v.top * 100) + "%";
+    w.style.width = (v.width * 100) + "%"; w.style.height = (v.height * 100) + "%";
+    var vid = document.createElement("video");
+    var full = 1 - v.cropT - v.cropB;
+    vid.style.height = (100 / full) + "%";
+    vid.style.top = (-100 * v.cropT / full) + "%";
+    vid.muted = true; vid.loop = true; vid.playsInline = true; vid.preload = "none";
+    vid.setAttribute("muted", ""); vid.setAttribute("playsinline", "");
+    if (v.controls) vid.controls = true;
+    else vid.addEventListener("click", function (e) { e.stopPropagation(); vid.paused ? vid.play() : vid.pause(); });
+    w.appendChild(vid); stage.appendChild(w);
+    v.wrap = w; v.video = vid;
+  });
+
+  function preload(n) {
+    if (n < 1 || n > N || cache[n]) return;
+    var im = new Image(); im.src = srcFor(n); cache[n] = im;
+  }
+
+  function show(n) {
+    n = Math.max(1, Math.min(N, n));
+    cur = n;
+    img.src = srcFor(n); img.alt = "Slide " + n;
+    countEl.textContent = n + " / " + N;
+    prevB.disabled = n === 1; nextB.disabled = n === N;
+    VIDEOS.forEach(function (v) {
+      if (v.slide === n) {
+        if (!v.video.src) v.video.src = v.src;
+        v.wrap.classList.add("on");
+        var p = v.video.play(); if (p && p.catch) p.catch(function () {});
+      } else {
+        v.wrap.classList.remove("on");
+        if (!v.video.paused) v.video.pause();
+        if (v.slide === n + 1 && !v.video.src) { v.video.preload = "auto"; v.video.src = v.src; }
+      }
+    });
+    if (location.hash !== "#" + n) history.replaceState(null, "", "#" + n);
+    preload(n + 1); preload(n + 2); preload(n - 1);
+  }
+
+  function fromHash() { var h = parseInt(location.hash.slice(1), 10); return isNaN(h) ? 1 : h; }
+
+  prevB.addEventListener("click", function () { show(cur - 1); });
+  nextB.addEventListener("click", function () { show(cur + 1); });
+  document.getElementById("fs").addEventListener("click", toggleFs);
+  function toggleFs() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+  }
+
+  stage.addEventListener("click", function (e) {
+    if (e.target.tagName === "VIDEO") return;
+    var r = stage.getBoundingClientRect();
+    show(e.clientX - r.left < r.width * 0.3 ? cur - 1 : cur + 1);
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = e.key;
+    if (k === "ArrowRight" || k === "PageDown" || k === " " || k === "Enter") { e.preventDefault(); show(cur + 1); }
+    else if (k === "ArrowLeft" || k === "PageUp" || k === "Backspace") { e.preventDefault(); show(cur - 1); }
+    else if (k === "Home") show(1);
+    else if (k === "End") show(N);
+    else if (k === "f" || k === "F") toggleFs();
+  });
+
+  var tx = null, ty = null;
+  stage.addEventListener("touchstart", function (e) { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+  stage.addEventListener("touchend", function (e) {
+    if (tx === null) return;
+    var dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) show(dx < 0 ? cur + 1 : cur - 1);
+    tx = ty = null;
+  });
+
+  window.addEventListener("hashchange", function () { var h = fromHash(); if (h !== cur) show(h); });
+  show(fromHash());
+})();
+</script>
+</body>
+</html>
