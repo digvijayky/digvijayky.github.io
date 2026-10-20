@@ -25,6 +25,8 @@
   #bar button:hover { background: #363636; }
   #bar button:disabled { opacity: .4; cursor: default; }
   #count { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); }
+  #vstat { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  #vstat:empty { display: none; }
   #bar a { color: var(--accent); text-decoration: none; }
   #bar a:hover { text-decoration: underline; }
   .sep { color: #444; }
@@ -37,7 +39,7 @@
 <body>
 <div id="viewport">
   <div id="stage" aria-live="polite">
-    <img class="slide" id="slideimg" alt="Slide 1" src="img/s-01.jpg">
+    <img class="slide" id="slideimg" alt="Slide 1" decoding="async">
   </div>
 </div>
 <div id="bar">
@@ -45,36 +47,48 @@
   <span id="count">1 / 44</span>
   <button id="next" aria-label="Next slide">&#8594;</button>
   <button id="fs" class="wide" aria-label="Full screen">Full screen</button>
-  <span class="sep wide">|</span>
-  <a href="../../data/Yarlagadda_defense_slides.pdf">PDF</a>
-  <span class="sep">/</span>
-  <a href="https://drive.usercontent.google.com/download?id=10DOPtFgP4WW-bAWXnHxcLWZsTFuUoQou&amp;export=download&amp;confirm=t">PPTX</a>
-  <span class="sep">/</span>
+  <span id="vstat"></span>
+  <span class="sep">|</span>
   <a href="../../">Home</a>
 </div>
-<noscript><p style="text-align:center">This viewer needs JavaScript. <a href="../../data/Yarlagadda_defense_slides.pdf">Open the PDF instead.</a></p></noscript>
+<noscript><p style="text-align:center">This slide viewer needs JavaScript.</p></noscript>
 <script>
 (function () {
   var N = 44;
+  // Slide images: lossless renders of the PowerPoint PDF export at each width. The viewer loads the
+  // smallest width that covers the stage in device pixels and upgrades (never downgrades) on resize or full screen.
+  var TIERS = [1920, 2560, 3840, 5120];
   // Video placement copied from the PPTX (EMU / slide size, srcRect crop in fractions).
+  // hd: 1920 px encode that starts at once. orig: the original video from the deck, byte for byte, split into
+  // parts under GitHub's file size limit; once all parts arrive it replaces the hd copy in place.
   var VIDEOS = [
-    { slide: 7,  src: "video/slide07.mp4", left: 6285844 / 12192000, top: 797800 / 6858000,
-      width: 5906155 / 12192000, height: 3278846 / 6858000, cropT: 0.06013, cropB: 0.08105, controls: false },
-    { slide: 19, src: "video/slide19.mp4", left: 739775 / 12192000, top: 768747 / 6858000,
-      width: 10712450 / 12192000, height: 6025753 / 6858000, cropT: 0, cropB: 0, controls: true }
+    { slide: 7,  hd: "video/slide07.mp4", orig: "video/slide07_original.mp4.part", parts: 4, bytes: 190257630,
+      left: 6285844 / 12192000, top: 797800 / 6858000, width: 5906155 / 12192000, height: 3278846 / 6858000,
+      cropT: 0.06013, cropB: 0.08105, controls: false },
+    { slide: 19, hd: "video/slide19.mp4", orig: "video/slide19_original.mp4.part", parts: 3, bytes: 125621028,
+      left: 739775 / 12192000, top: 768747 / 6858000, width: 10712450 / 12192000, height: 6025753 / 6858000,
+      cropT: 0, cropB: 0, controls: true }
   ];
   var stage = document.getElementById("stage"), img = document.getElementById("slideimg");
   var countEl = document.getElementById("count"), prevB = document.getElementById("prev"), nextB = document.getElementById("next");
-  var cur = 1, cache = {};
+  var vstat = document.getElementById("vstat");
+  var cur = 1, cache = {}, tier = 0, token = 0;
 
   function pad(n) { return (n < 10 ? "0" : "") + n; }
-  function srcFor(n) { return "img/s-" + pad(n) + ".jpg"; }
+  function stagePx() { return stage.getBoundingClientRect().width * (window.devicePixelRatio || 1); }
+  function pickTier() {
+    var px = stagePx();
+    for (var i = 0; i < TIERS.length; i++) if (TIERS[i] >= px * 0.98) return TIERS[i];
+    return TIERS[TIERS.length - 1];
+  }
+  function srcFor(n) { return "img/" + tier + "/s-" + pad(n) + ".webp"; }
+  // Original videos are 126 to 190 MB; skip them on phone-sized screens and when the browser asks to save data.
+  function wantOriginal() {
+    var c = navigator.connection;
+    return !(c && c.saveData) && !!window.fetch && window.matchMedia("(min-width: 1000px)").matches;
+  }
 
-  VIDEOS.forEach(function (v) {
-    var w = document.createElement("div");
-    w.className = "vwrap";
-    w.style.left = (v.left * 100) + "%"; w.style.top = (v.top * 100) + "%";
-    w.style.width = (v.width * 100) + "%"; w.style.height = (v.height * 100) + "%";
+  function makeVideo(v) {
     var vid = document.createElement("video");
     var full = 1 - v.cropT - v.cropB;
     vid.style.height = (100 / full) + "%";
@@ -83,35 +97,121 @@
     vid.setAttribute("muted", ""); vid.setAttribute("playsinline", "");
     if (v.controls) vid.controls = true;
     else vid.addEventListener("click", function (e) { e.stopPropagation(); vid.paused ? vid.play() : vid.pause(); });
-    w.appendChild(vid); stage.appendChild(w);
-    v.wrap = w; v.video = vid;
+    return vid;
+  }
+  function play(vid) { var p = vid.play(); if (p && p.catch) p.catch(function () {}); }
+
+  VIDEOS.forEach(function (v) {
+    var w = document.createElement("div");
+    w.className = "vwrap";
+    w.style.left = (v.left * 100) + "%"; w.style.top = (v.top * 100) + "%";
+    w.style.width = (v.width * 100) + "%"; w.style.height = (v.height * 100) + "%";
+    v.video = makeVideo(v);
+    w.appendChild(v.video); stage.appendChild(w);
+    v.wrap = w; v.got = 0;
   });
 
+  function showStat() {
+    var v = VIDEOS.filter(function (x) { return x.slide === cur; })[0];
+    vstat.textContent = v && v.loading && !v.origUrl ? "Loading original video " + Math.floor(100 * v.got / v.bytes) + "%" : "";
+  }
+
+  function fetchPart(v, url) {
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error(url + " " + r.status);
+      if (!r.body || !r.body.getReader) return r.blob().then(function (b) { v.got += b.size; showStat(); return b; });
+      var reader = r.body.getReader(), chunks = [];
+      return (function pump() {
+        return reader.read().then(function (x) {
+          if (x.done) return new Blob(chunks);
+          chunks.push(x.value); v.got += x.value.length; showStat();
+          return pump();
+        });
+      })();
+    });
+  }
+
+  // Swap in a second <video> once it has the frame at the current time, so the upgrade has no black flash.
+  function upgrade(v, url) {
+    var old = v.video, nv = makeVideo(v);
+    nv.preload = "auto"; nv.src = url;
+    nv.addEventListener("loadeddata", function () {
+      var t = old.currentTime || 0, live = v.wrap.classList.contains("on") && !old.paused;
+      var done = false, fin = function () {
+        if (done) return; done = true;
+        v.wrap.replaceChild(nv, old); v.video = nv;
+        old.pause(); old.removeAttribute("src"); old.load();
+        if (live && v.slide === cur) play(nv);
+      };
+      nv.addEventListener("seeked", fin, { once: true });
+      setTimeout(fin, 1500);
+      try { nv.currentTime = Math.min(t + (live ? 0.1 : 0), (nv.duration || t + 1) - 0.05); } catch (e) { fin(); }
+    }, { once: true });
+  }
+
+  function loadOriginal(v) {
+    if (v.loading || !wantOriginal()) return;
+    v.loading = true; showStat();
+    var urls = [];
+    for (var i = 0; i < v.parts; i++) urls.push(v.orig + i);
+    Promise.all(urls.map(function (u) { return fetchPart(v, u); })).then(function (blobs) {
+      v.origUrl = URL.createObjectURL(new Blob(blobs, { type: "video/mp4" }));
+      showStat();
+      upgrade(v, v.origUrl);
+    }).catch(function () { v.loading = false; v.got = 0; showStat(); });
+  }
+
+  // Toggle videos once the new slide image is on screen, so a video never sits on the wrong slide.
+  function syncVideos(n) {
+    VIDEOS.forEach(function (v) {
+      if (v.slide === n) {
+        if (!v.video.getAttribute("src")) v.video.src = v.origUrl || v.hd;
+        v.wrap.classList.add("on");
+        play(v.video);
+        if (!v.origUrl) loadOriginal(v);
+      } else {
+        v.wrap.classList.remove("on");
+        if (!v.video.paused) v.video.pause();
+        if (v.slide === n + 1) {
+          if (!v.video.getAttribute("src")) { v.video.preload = "auto"; v.video.src = v.origUrl || v.hd; }
+          if (!v.origUrl) loadOriginal(v);
+        }
+      }
+    });
+    showStat();
+  }
+
   function preload(n) {
-    if (n < 1 || n > N || cache[n]) return;
-    var im = new Image(); im.src = srcFor(n); cache[n] = im;
+    if (n < 1 || n > N) return;
+    var s = srcFor(n);
+    if (cache[s]) return;
+    var im = new Image(); im.src = s; cache[s] = im;
   }
 
   function show(n) {
     n = Math.max(1, Math.min(N, n));
     cur = n;
+    var my = ++token, applied = false;
+    var apply = function () { if (my === token && !applied) { applied = true; syncVideos(n); } };
+    img.onload = img.onerror = apply;
+    setTimeout(apply, 2000);
     img.src = srcFor(n); img.alt = "Slide " + n;
     countEl.textContent = n + " / " + N;
     prevB.disabled = n === 1; nextB.disabled = n === N;
-    VIDEOS.forEach(function (v) {
-      if (v.slide === n) {
-        if (!v.video.src) v.video.src = v.src;
-        v.wrap.classList.add("on");
-        var p = v.video.play(); if (p && p.catch) p.catch(function () {});
-      } else {
-        v.wrap.classList.remove("on");
-        if (!v.video.paused) v.video.pause();
-        if (v.slide === n + 1 && !v.video.src) { v.video.preload = "auto"; v.video.src = v.src; }
-      }
-    });
+    showStat();
     if (location.hash !== "#" + n) history.replaceState(null, "", "#" + n);
     preload(n + 1); preload(n + 2); preload(n - 1);
   }
+
+  function retier() {
+    var t = pickTier();
+    if (t <= tier) return;
+    tier = t; show(cur);
+  }
+  var rt = null;
+  window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(retier, 200); });
+  document.addEventListener("fullscreenchange", function () { setTimeout(retier, 100); });
+  tier = pickTier();
 
   function fromHash() { var h = parseInt(location.hash.slice(1), 10); return isNaN(h) ? 1 : h; }
 
